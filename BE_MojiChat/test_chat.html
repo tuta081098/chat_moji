@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Chat Moji</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+<h2>Chat Moji Tester</h2>
+<div id="status" style="color: red;">Đang kết nối...</div>
+
+<input type="text" id="roomId" placeholder="Nhập Conversation ID vào đây">
+<button onclick="joinRoom()">Vào phòng chat</button>
+<br><br>
+<input type="text" id="senderId" placeholder="Nhập ID người gửi (User A)">
+<input type="text" id="messageInput" placeholder="Nội dung tin nhắn...">
+<button onclick="sendMessage()">Gửi</button>
+
+<script>
+    // Kết nối đến Server Python
+    const socket = io("http://localhost:8000", {
+        transports: ["websocket"] // Bắt buộc dùng websocket
+    });
+
+    socket.on("connect", () => {
+        document.getElementById("status").innerText = "🟢 Đã kết nối: " + socket.id;
+        document.getElementById("status").style.color = "green";
+    });
+
+    socket.on("disconnect", () => {
+        document.getElementById("status").innerText = "🔴 Mất kết nối";
+        document.getElementById("status").style.color = "red";
+    });
+
+    // Nhận tin nhắn từ server
+    socket.on("receive_message", (data) => {
+        const li = document.createElement("li");
+        li.innerText = JSON.stringify(data);
+        document.getElementById("messages").appendChild(li);
+    });
+
+    // Gửi tin nhắn
+    function sendMessage() {
+        const input = document.getElementById("messageInput");
+        const text = input.value;
+        // Gửi sự kiện 'send_message' lên server
+        socket.emit("send_message", { content: text, user: "TestUser" });
+        input.value = "";
+    }
+
+    function joinRoom() {
+        const room = document.getElementById("roomId").value;
+        socket.emit("join_room", { room_id: room });
+    }
+
+    function sendMessage() {
+        const room = document.getElementById("roomId").value;
+        const sender = document.getElementById("senderId").value;
+        const text = document.getElementById("messageInput").value;
+
+        socket.emit("send_message", {
+            conversation_id: room,
+            sender_id: sender,
+            content: text
+        });
+    }
+</script>
+</body>
+</html>
