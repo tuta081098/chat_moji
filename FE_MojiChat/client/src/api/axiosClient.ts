@@ -3,7 +3,8 @@
 import axios, { type InternalAxiosRequestConfig, type AxiosResponse, AxiosError } from "axios";
 
 const axiosClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL+"/api" || 'http://localhost:8000/api',
+  // baseURL: import.meta.env.VITE_API_URL+"/api" || 'http://localhost:8000/api',
+  baseURL: 'https://chat-moji.onrender.com/api',
   headers: {
     'Content-Type': 'application/json',
   },
