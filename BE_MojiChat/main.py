@@ -37,7 +37,8 @@ origins = [
     "http://localhost:5173", # Vite React default
     "http://localhost:3000",
     "http://127.0.0.1:5173",
-    "*" # Tạm thời mở hết để test cho dễ
+    "*", # Tạm thời mở hết để test cho dễ
+    "https://ten-du-an-cua-ban.vercel.app"
 ]
 
 app.add_middleware(

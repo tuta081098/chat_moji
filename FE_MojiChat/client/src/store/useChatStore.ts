@@ -4,7 +4,9 @@ import io, { Socket } from 'socket.io-client';
 import useAuthStore from './useAuthStore';
 import type { User } from '../types/auth';
 
-const BASE_URL = 'http://localhost:8000';
+// --- 1. XỬ LÝ BIẾN MÔI TRƯỜNG ---
+// Tự động nhận diện Vite hoặc CRA. Nếu không có thì fallback về localhost
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export interface Message {
   id: string;
@@ -13,6 +15,7 @@ export interface Message {
   created_at: string;
   receiver_id: string;
   conversation_id?: string;
+  image_url?: string; // Thêm field này nếu bạn làm gửi ảnh
 }
 
 interface ChatState {
@@ -28,9 +31,9 @@ interface ChatState {
   socket: Socket | null;
   currentConversationId: string | null;
 
-  // --- STATE MỚI CHO PHÂN TRANG ---
-  hasMore: boolean;       // Còn tin cũ để load không?
-  isLoadingMore: boolean; // Đang tải tin cũ?
+  // Pagination
+  hasMore: boolean;       
+  isLoadingMore: boolean; 
 
   // Actions
   getFriends: () => Promise<void>;
@@ -41,17 +44,16 @@ interface ChatState {
   acceptFriendRequest: (senderId: string) => Promise<void>;
 
   getMessages: (userId: string) => Promise<void>;
-  loadMoreMessages: () => Promise<void>; // <-- Action mới
+  loadMoreMessages: () => Promise<void>; 
   
   setSelectedUser: (user: User | null) => void;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, imageUrl?: string) => Promise<void>; // Update support ảnh
 
   connectSocket: (userId: string) => void;
   disconnectSocket: () => void;
   
-  subscribeToMessages: () => void;
-  unsubscribeFromMessages: () => void;
-  
+  // Clean up functions
+  resetChat: () => void;
 }
 
 const useChatStore = create<ChatState>((set, get) => ({
@@ -63,17 +65,16 @@ const useChatStore = create<ChatState>((set, get) => ({
   isUsersLoading: false,
   isMessagesLoading: false,
   socket: null,
+  currentConversationId: null,
 
-  // Default state phân trang
   hasMore: true,
   isLoadingMore: false,
 
-  // 1. Lấy danh sách bạn bè
   getFriends: async () => {
     set({ isUsersLoading: true });
     try {
-      const res = await axiosClient.get<any, User[]>('/auth/users');
-      set({ users: res });
+      const res = await axiosClient.get('/auth/users');
+      set({ users: res as unknown as User[] });
     } catch (error) {
       console.error(error);
     } finally {
@@ -81,25 +82,23 @@ const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // 2. Lấy danh sách lời mời
   getFriendRequests: async () => {
     try {
       const currentUserId = useAuthStore.getState().user?.id;
-      const res = await axiosClient.get<any, User[]>('/friends/requests/received', {
+      const res = await axiosClient.get('/friends/requests/received', {
         params: { current_user_id: currentUserId }
       });
-      set({ friendRequests: res });
+      set({ friendRequests: res as unknown as User[] });
     } catch (error) {
       console.error("Lỗi lấy lời mời:", error);
     }
   },
 
-  // 3. Tìm kiếm user
   searchUsers: async () => {
     set({ isUsersLoading: true });
     try {
-      const res = await axiosClient.get<any, User[]>('/auth/users');
-      set({ searchResults: res });
+      const res = await axiosClient.get('/auth/users');
+      set({ searchResults: res as unknown as User[] });
     } catch (error) {
       console.error(error);
     } finally {
@@ -107,7 +106,6 @@ const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // 4. Gửi lời mời
   sendFriendRequest: async (receiverId) => {
     try {
       const currentUserId = useAuthStore.getState().user?.id;
@@ -121,7 +119,6 @@ const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // 5. Chấp nhận lời mời
   acceptFriendRequest: async (senderId) => {
     try {
       const currentUserId = useAuthStore.getState().user?.id;
@@ -137,24 +134,20 @@ const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // 6. Lấy tin nhắn (Lần đầu mở chat)
   getMessages: async (userId) => {
-    if (!userId || userId === "undefined") return;
-
-    // Reset lại state mỗi khi đổi người chat
+    if (!userId) return;
     set({ isMessagesLoading: true, messages: [], hasMore: true }); 
 
     try {
       const currentUserId = useAuthStore.getState().user?.id;
-      
-      // Thêm params limit & skip = 0
-      const res = await axiosClient.get<any, Message[]>(
+      const res = await axiosClient.get(
         `/chat/${userId}/messages?current_user_id=${currentUserId}&limit=20&skip=0`
       );
       
+      const data = res as unknown as Message[];
       set({ 
-        messages: res,
-        hasMore: res.length >= 20 // Nếu trả về ít hơn 20 tin -> Hết tin cũ
+        messages: data,
+        hasMore: data.length >= 20 
       });
     } catch (error) { 
       set({ messages: [] }); 
@@ -163,28 +156,26 @@ const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // --- 6.5. Action mới: Load thêm tin nhắn cũ ---
   loadMoreMessages: async () => {
     const { selectedUser, messages, hasMore, isLoadingMore } = get();
-    // Nếu không có user, hết tin, hoặc đang load dở -> Dừng
     if (!selectedUser || !hasMore || isLoadingMore) return;
 
     set({ isLoadingMore: true });
 
     try {
       const currentUserId = useAuthStore.getState().user?.id;
-      // Skip bằng số lượng tin hiện có
       const skip = messages.length; 
 
-      const res = await axiosClient.get<any, Message[]>(
+      const res = await axiosClient.get(
         `/chat/${selectedUser.id}/messages?current_user_id=${currentUserId}&limit=20&skip=${skip}`
       );
+      
+      const newMsgs = res as unknown as Message[];
 
-      if (res.length > 0) {
+      if (newMsgs.length > 0) {
         set({
-          // Nối tin cũ vào ĐẦU mảng (...res, ...messages)
-          messages: [...res, ...messages],
-          hasMore: res.length >= 20
+          messages: [...newMsgs, ...messages],
+          hasMore: newMsgs.length >= 20
         });
       } else {
         set({ hasMore: false });
@@ -200,19 +191,17 @@ const useChatStore = create<ChatState>((set, get) => ({
     set({ selectedUser: user });
     if (!user) return;
 
-    // 1. Lấy tin nhắn cũ
+    // Lấy tin nhắn
     get().getMessages(user.id);
 
-    // 2. Lấy luôn Conversation ID ngay lúc này!
+    // Lấy Conversation ID
     try {
         const currentUser = useAuthStore.getState().user;
         if(currentUser) {
-            const res = await axiosClient.post<{ conversation_id: string }>(
-                '/chat/conversations',
+            const res = await axiosClient.post('/chat/conversations',
                 { participant_id: user.id },
                 { params: { current_user_id: currentUser.id } }
             );
-            // Lưu ID vào Store dùng dần
             set({ currentConversationId: (res as any).conversation_id });
         }
     } catch (error) {
@@ -220,28 +209,22 @@ const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // 7. Logic Socket (CORE)
   connectSocket: (userId: string) => {
     const { socket } = get();
 
-    // 1. CHẶN KẾT NỐI KÉP
-    if (socket) {
-        if (!socket.connected) {
-            socket.connect(); 
-        }
-        return; 
-    }
+    // Nếu socket đã tồn tại và đang kết nối -> Không làm gì cả
+    if (socket?.connected) return;
 
-    // 2. Tạo mới Socket
+    // --- SỬ DỤNG BASE_URL TỪ ENV ---
     const newSocket = io(BASE_URL, {
       query: { userId },
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'], // Bỏ polling để tối ưu tốc độ nếu server hỗ trợ tốt
       withCredentials: true,
+      reconnectionAttempts: 5, // Cố kết nối lại 5 lần nếu rớt mạng
     });
 
-    // 3. Setup sự kiện
     newSocket.on("connect", () => {
-      console.log("✅ Socket Connected ID:", newSocket.id);
+      console.log("✅ Socket Connected:", newSocket.id);
       newSocket.emit("setup", userId);
     });
 
@@ -249,9 +232,7 @@ const useChatStore = create<ChatState>((set, get) => ({
       console.log("❌ Socket Disconnected");
     });
 
-    // 4. LẮNG NGHE TIN NHẮN
     newSocket.on("receive_message", (newMessage: Message) => {
-        console.log("🔥 [SOCKET IN] Nhận tin:", newMessage);
         const { selectedUser, messages, users } = get();
         const currentUser = useAuthStore.getState().user;
         
@@ -260,7 +241,7 @@ const useChatStore = create<ChatState>((set, get) => ({
         const currentUserId = String(currentUser?.id);
         const selectedUserId = selectedUser ? String(selectedUser.id) : null;
 
-        // Logic 1: Cập nhật khung chat
+        // Logic cập nhật UI Chat
         const isBelongToCurrentChat = 
             (selectedUserId === msgSenderId) || 
             (selectedUserId === msgReceiverId && msgSenderId === currentUserId);
@@ -269,19 +250,16 @@ const useChatStore = create<ChatState>((set, get) => ({
             set({ messages: [...messages, newMessage] });
         }
 
-        // Logic 2: Cập nhật Sidebar (Đưa người vừa nhắn lên đầu)
+        // Logic đưa user lên đầu danh sách
         const friendIndex = users.findIndex(u => String(u.id) === msgSenderId || String(u.id) === msgReceiverId);
         if (friendIndex !== -1) {
             const updatedUsers = [...users];
-            const friend = updatedUsers[friendIndex];
-            // Xóa vị trí cũ, đưa lên đầu
-            updatedUsers.splice(friendIndex, 1);
+            const [friend] = updatedUsers.splice(friendIndex, 1);
             updatedUsers.unshift(friend);
             set({ users: updatedUsers });
         }
     });
 
-    // 5. Kết nối
     newSocket.connect();
     set({ socket: newSocket });
   },
@@ -294,30 +272,28 @@ const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // 8. Gửi tin nhắn
-  sendMessage: async (content: string) => {
-    const { selectedUser, socket, currentConversationId } = get(); // Lấy ID từ Store
+  // Hỗ trợ gửi ảnh (imageUrl optional)
+  sendMessage: async (content: string, imageUrl?: string) => {
+    const { selectedUser, socket, currentConversationId } = get();
     const currentUser = useAuthStore.getState().user;
 
     if (!selectedUser || !currentUser || !socket) return;
 
-    // --- LOGIC MỚI: Dùng ID đã lưu, KHÔNG GỌI API NỮA ---
     const messageData = {
-        conversation_id: currentConversationId, // Dùng biến có sẵn
+        conversation_id: currentConversationId,
         sender_id: currentUser.id,
         content: content,
-        receiver_id: selectedUser.id
+        receiver_id: selectedUser.id,
+        image_url: imageUrl || null, // Gửi thêm trường ảnh
+        type: imageUrl ? 'image' : 'text' // Flag để FE biết mà render
     };
 
-    console.log("📤 Đang gửi tin (Socket only):", messageData);
-    
-    // Bắn thẳng Socket luôn
     socket.emit("send_message", messageData);
   },
 
-  subscribeToMessages: () => { console.log("Legacy subscribe ignored"); },
-  unsubscribeFromMessages: () => { },
-  currentConversationId: null,
+  resetChat: () => {
+      set({ selectedUser: null, messages: [], currentConversationId: null });
+  }
 }));
 
 export default useChatStore;
