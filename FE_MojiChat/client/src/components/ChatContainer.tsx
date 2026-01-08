@@ -10,10 +10,9 @@ const ChatContainer = () => {
     getMessages, 
     loadMoreMessages, 
     isMessagesLoading, 
-    isLoadingMore, // Vẫn lấy state này để hiện spinner
+    isLoadingMore, 
     selectedUser,
-    subscribeToMessages,
-    unsubscribeFromMessages
+    // Đã xóa 2 hàm subscribe/unsubscribe gây lỗi ở đây
   } = useChatStore();
   
   const { user: currentUser } = useAuthStore();
@@ -28,47 +27,36 @@ const ChatContainer = () => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // 1. Initial Load
+  // 1. Initial Load (Đã sửa lại gọn gàng)
   useEffect(() => {
-    if (selectedUser) getMessages(selectedUser.id);
-    subscribeToMessages();
-    return () => unsubscribeFromMessages();
-  }, [selectedUser]); // Bỏ các dependency thừa để tránh re-run không cần thiết
+    if (selectedUser) {
+        getMessages(selectedUser.id);
+    }
+  }, [selectedUser, getMessages]); 
 
-  // --- 2. LOGIC QUAN TRỌNG NHẤT: XỬ LÝ CUỘN (GỘP CHUNG) ---
+  // --- 2. LOGIC XỬ LÝ CUỘN (GIỮ NGUYÊN VÌ LOGIC NÀY TỐT) ---
   useLayoutEffect(() => {
     if (!containerRef.current || !messages.length) return;
 
     const currentScrollHeight = containerRef.current.scrollHeight;
     
-    // TRƯỜNG HỢP A: Đang Load More (người dùng cuộn lên)
+    // TRƯỜNG HỢP A: Đang Load More (Giữ vị trí đọc)
     if (prevScrollHeightRef.current > 0) {
-        // Tính độ chênh lệch chiều cao do tin nhắn mới thêm vào trên đầu
         const scrollDiff = currentScrollHeight - prevScrollHeightRef.current;
-        
-        // Dịch thanh cuộn xuống một đoạn đúng bằng chiều cao tin mới thêm
-        // Giúp mắt người dùng vẫn nhìn thấy tin nhắn cũ
         containerRef.current.scrollTop = containerRef.current.scrollTop + scrollDiff;
-        
-        // Reset lại để lần sau không nhảy vào đây nữa
         prevScrollHeightRef.current = 0;
     } 
-    // TRƯỜNG HỢP B: Tin nhắn mới hoặc Lần đầu vào (Tự động cuộn xuống đáy)
+    // TRƯỜNG HỢP B: Tin nhắn mới (Cuộn xuống đáy)
     else {
-        // Chỉ cuộn xuống đáy nếu KHÔNG PHẢI đang load more
-        // (Logic này thay thế hoàn toàn useEffect cũ)
         messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]); 
   // --------------------------------------------------------
 
-  // 3. Sự kiện Scroll: Bắt sự kiện khi kéo lên đỉnh
+  // 3. Sự kiện Scroll Load More
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight } = e.currentTarget;
-
-    // Nếu cuộn lên sát đỉnh (còn 50px) và không đang load
     if (scrollTop < 50 && !isLoadingMore && !isMessagesLoading) {
-        // LƯU LẠI CHIỀU CAO TRƯỚC KHI LOAD (Đây là chìa khóa)
         prevScrollHeightRef.current = scrollHeight;
         loadMoreMessages();
     }
@@ -93,9 +81,8 @@ const ChatContainer = () => {
       <div 
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 space-y-4" // Bỏ scroll-smooth ở đây để tránh xung đột khi chỉnh scrollTop thủ công
+        className="flex-1 overflow-y-auto p-4 space-y-4"
       >
-        {/* Loading Spinner cho Load More */}
         {isLoadingMore && (
             <div className="flex justify-center py-2">
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
@@ -104,6 +91,7 @@ const ChatContainer = () => {
 
         {messages.map((msg, idx) => {
             const isMyMessage = msg.sender_id === currentUser?.id;
+            
             return (
                 <div key={msg.id || idx} className={`flex ${isMyMessage ? "justify-end" : "justify-start"}`}>
                     <div className="flex flex-col max-w-[70%]">
@@ -114,7 +102,18 @@ const ChatContainer = () => {
                                 : "bg-white text-gray-800 border border-gray-200 rounded-2xl rounded-tl-none"
                             }
                         `}>
-                            <p className="text-sm md:text-base">{msg.content}</p>
+                            {/* --- LOGIC HIỂN THỊ ẢNH HOẶC TEXT --- */}
+                            {msg.image_url ? (
+                                <img 
+                                    src={msg.image_url} 
+                                    alt="Sent attachment" 
+                                    className="rounded-lg max-h-[200px] object-cover cursor-pointer hover:opacity-90 transition"
+                                    onClick={() => window.open(msg.image_url, '_blank')}
+                                />
+                            ) : (
+                                <p className="text-sm md:text-base">{msg.content}</p>
+                            )}
+                            {/* ------------------------------------ */}
                         </div>
                         <div className={`text-[10px] mt-1 px-1 opacity-70 ${isMyMessage ? "text-right" : "text-left"}`}>
                             {formatTime(msg.created_at)}
