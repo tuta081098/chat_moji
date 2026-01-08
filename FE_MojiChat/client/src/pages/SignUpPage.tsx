@@ -1,13 +1,13 @@
 import { useState } from "react";
 import useAuthStore from "../store/useAuthStore";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, MessageSquare, User, Mail, Lock, Loader2, AtSign, Smile } from "lucide-react";
+// Đã xóa 'User' khỏi dòng import dưới đây
+import { Eye, EyeOff, MessageSquare, Mail, Lock, Loader2, AtSign, Smile } from "lucide-react";
 import toast from "react-hot-toast";
 
 const SignUpPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   
-  // State form khớp với RegisterData trong store
   const [formData, setFormData] = useState({
     full_name: "",
     username: "",
@@ -35,7 +35,6 @@ const SignUpPage = () => {
     const success = validateForm();
     if (success === true) {
        const isSuccess = await signup(formData);
-       // Nếu đăng ký thành công -> Chuyển về trang Login
        if (isSuccess) navigate("/login"); 
     }
   };
@@ -45,7 +44,6 @@ const SignUpPage = () => {
       {/* Cột Trái: Form */}
       <div className="flex flex-col justify-center items-center p-6 sm:p-12">
         <div className="w-full max-w-md space-y-8">
-          {/* Logo Header */}
           <div className="text-center mb-8">
             <div className="flex flex-col items-center gap-2 group">
               <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
@@ -58,7 +56,6 @@ const SignUpPage = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             
-            {/* 1. Họ và tên */}
             <div className="form-control">
               <label className="label"><span className="label-text font-medium">Họ và tên</span></label>
               <div className="relative">
@@ -75,9 +72,8 @@ const SignUpPage = () => {
               </div>
             </div>
 
-            {/* 2. Username (Quan trọng cho Backend của bạn) */}
             <div className="form-control">
-              <label className="label"><span className="label-text font-medium">Tên đăng nhập (Username)</span></label>
+              <label className="label"><span className="label-text font-medium">Tên đăng nhập</span></label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <AtSign className="size-5 text-base-content/40" />
@@ -92,7 +88,6 @@ const SignUpPage = () => {
               </div>
             </div>
 
-            {/* 3. Email */}
             <div className="form-control">
               <label className="label"><span className="label-text font-medium">Email</span></label>
               <div className="relative">
@@ -109,7 +104,6 @@ const SignUpPage = () => {
               </div>
             </div>
 
-            {/* 4. Password */}
             <div className="form-control">
               <label className="label"><span className="label-text font-medium">Mật khẩu</span></label>
               <div className="relative">
@@ -160,10 +154,8 @@ const SignUpPage = () => {
         </div>
       </div>
 
-      {/* Cột Phải: Ảnh minh họa */}
       <div className="hidden lg:flex items-center justify-center bg-indigo-50 p-12">
         <div className="max-w-md text-center">
-             {/* Bạn có thể thay bằng ảnh khác hoặc dùng tạm thẻ div */}
              <div className="w-64 h-64 bg-indigo-200 rounded-full mx-auto mb-6 flex items-center justify-center animate-pulse">
                 <MessageSquare className="size-32 text-indigo-500" />
              </div>

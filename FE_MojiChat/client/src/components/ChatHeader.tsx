@@ -1,9 +1,7 @@
 import useChatStore from "../store/useChatStore";
-import useAuthStore from "../store/useAuthStore";
 
 const ChatHeader = () => {
   const { selectedUser, setSelectedUser } = useChatStore();
-  const { user: currentUser } = useAuthStore();
 
   return (
     <div className="p-2.5 border-b border-base-300 w-full bg-white shadow-sm">
